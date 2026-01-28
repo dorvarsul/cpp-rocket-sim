@@ -66,9 +66,12 @@ public:
   /**
    * Compute fin lift force for current state (for SimulationWorld physics)
    * @param state Current state vector
+   * @param windVelocity Current wind velocity vector (default zero)
    * @return Fin-generated lift force in Newtons
    */
-  Eigen::Vector3d computeFinLift(const StateVector &state);
+  Eigen::Vector3d
+  computeFinLift(const StateVector &state,
+                 const Eigen::Vector3d &windVelocity = Eigen::Vector3d::Zero());
 
   /**
    * Update current G-load (called by SimulationWorld after computing total

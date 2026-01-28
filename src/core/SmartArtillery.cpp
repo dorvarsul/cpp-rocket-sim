@@ -32,7 +32,9 @@ void SmartArtillery::setTarget(const Eigen::Vector3d &newTarget) {
   m_guidance.setTarget(newTarget);
 }
 
-Eigen::Vector3d SmartArtillery::computeFinLift(const StateVector &state) {
+Eigen::Vector3d
+SmartArtillery::computeFinLift(const StateVector &state,
+                               const Eigen::Vector3d &windVelocity) {
   // Return zero if guidance is disabled or projectile has landed
   if (!m_guidanceEnabled || m_landed) {
     return Eigen::Vector3d::Zero();
@@ -53,19 +55,24 @@ Eigen::Vector3d SmartArtillery::computeFinLift(const StateVector &state) {
   Eigen::Vector3d guidanceAccel =
       m_guidance.computeGuidanceCommand(estimatedState);
 
-  // Compute dynamic pressure
+  // Sprint 3: Wind Correction
+  // Aerodynamic forces depend on Relative Velocity (Airspeed)
+  Eigen::Vector3d relativeVelocity = state.velocity - windVelocity;
+  double airspeed = relativeVelocity.norm();
+
+  // Compute dynamic pressure using Airspeed
   double altitude = state.position.z();
   double rho = m_atmosphere.getDensity(altitude);
-  double speed = state.velocity.norm();
-  double dynamicPressure = 0.5 * rho * speed * speed;
+  double dynamicPressure = 0.5 * rho * airspeed * airspeed;
 
   // Translate guidance command to fin deflections
+  // Note: Control system should technically operate on airspeed too for scaling
   Eigen::Vector2d finAngles = m_control.computeFinDeflection(
-      guidanceAccel, state.velocity, dynamicPressure);
+      guidanceAccel, relativeVelocity, dynamicPressure);
 
-  // Compute aerodynamic lift force from fins
+  // Compute aerodynamic lift force from fins using Airspeed
   Eigen::Vector3d finLift = m_control.computeFinLift(
-      finAngles, state.velocity, dynamicPressure, m_aero.getReferenceArea());
+      finAngles, relativeVelocity, dynamicPressure, m_aero.getReferenceArea());
 
   return finLift;
 }

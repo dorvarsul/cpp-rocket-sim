@@ -14,7 +14,6 @@
 #include "visualization/Renderer.h"
 
 #include <cmath>
-#include <iostream>
 #include <vector>
 
 // Global Camera for input callback (simple approach)
@@ -140,8 +139,9 @@ int main() {
       }
     } else {
       // Keep timer updated to avoid huge jump on resume
-      static double lastFrameTime = glfwGetTime();
-      lastFrameTime = glfwGetTime();
+      // Fixed: Removed unused variable warning
+      // static double lastFrameTime = glfwGetTime();
+      // lastFrameTime = glfwGetTime();
     }
 
     // Start the Dear ImGui frame
@@ -158,9 +158,10 @@ int main() {
     if (isFirstRun) {
       isFirstRun = false;
       ImGui::DockBuilderRemoveNode(dockSpaceId);
-      ImGui::DockBuilderAddNode(dockSpaceId,
-                                ImGuiDockNodeFlags_PassthruCentralNode |
-                                    ImGuiDockNodeFlags_DockSpace);
+      // Fixed: Cast flags to avoid warning
+      ImGui::DockBuilderAddNode(
+          dockSpaceId, ImGuiDockNodeFlags_PassthruCentralNode |
+                           (ImGuiDockNodeFlags)ImGuiDockNodeFlags_DockSpace);
       ImGui::DockBuilderSetNodeSize(dockSpaceId,
                                     ImGui::GetMainViewport()->Size);
 
@@ -334,6 +335,9 @@ int main() {
         // Show actual horizontal range to target
         double actualRange = std::sqrt(targetX * targetX + targetY * targetY);
         ImGui::Text("  Target Range: %.1f m", actualRange);
+
+        // Suppress warning
+        (void)calculatedRange;
       } else {
         ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
                            "TARGET UNREACHABLE!");
@@ -354,6 +358,46 @@ int main() {
         guidanceConfig.convergenceRadius_m = (double)convergenceRadius;
 
       ImGui::Checkbox("Enable Sensor Noise", &sensorNoiseEnabled);
+    }
+
+    ImGui::Separator();
+    // Sprint 3: Wind Configuration
+    ImGui::Text("Environment");
+    static float windSpeed = 0.0f;
+    static float windDirection = 0.0f; // Azimuth in degrees
+
+    if (ImGui::Button("Wind Configuration")) {
+      ImGui::OpenPopup("Wind Config");
+    }
+
+    if (ImGui::BeginPopup("Wind Config")) {
+      ImGui::Text("Wind Parameters");
+      ImGui::Separator();
+      bool changed = false;
+      if (ImGui::SliderFloat("Wind Speed (m/s)", &windSpeed, 0.0f, 50.0f))
+        changed = true;
+      if (ImGui::SliderFloat("Wind Direction (deg)", &windDirection, 0.0f,
+                             360.0f))
+        changed = true;
+
+      // Compass visual explanation
+      ImGui::TextDisabled("(0=East, 90=North, 180=West, 270=South)");
+
+      if (changed) {
+        // Calculate wind vector (Z=0 for horizontal wind)
+        double rad = (double)windDirection * M_PI / 180.0;
+        Eigen::Vector3d w(windSpeed * std::cos(rad), windSpeed * std::sin(rad),
+                          0.0);
+        world.setWindVelocity(w);
+      }
+      ImGui::EndPopup();
+    }
+    // Show current wind summary inline
+    if (std::abs(windSpeed) > 0.1f) {
+      ImGui::TextColored(ImVec4(0.5f, 0.5f, 1.0f, 1.0f),
+                         "Wind: %.1f m/s @ %.0f deg", windSpeed, windDirection);
+    } else {
+      ImGui::TextDisabled("Wind: Calm");
     }
 
     ImGui::Separator();

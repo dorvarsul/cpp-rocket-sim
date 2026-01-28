@@ -23,4 +23,11 @@ private:
   // Derivative function for RK4: f(t, state) -> dydt
   // Sprint 2: Needs projectile reference for drag/thrust forces
   StateVector derivative(const StateVector &state, IProjectile *proj) const;
+
+  // Sprint 3: Wind Simulation
+  Eigen::Vector3d m_windVelocity = Eigen::Vector3d::Zero();
+
+public:
+  void setWindVelocity(const Eigen::Vector3d &v) { m_windVelocity = v; }
+  Eigen::Vector3d getWindVelocity() const { return m_windVelocity; }
 };

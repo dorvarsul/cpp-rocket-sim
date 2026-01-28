@@ -33,21 +33,31 @@ StateVector SimulationWorld::derivative(const StateVector &state,
   auto *dumbArtillery = dynamic_cast<DumbArtillery *>(proj);
 
   if (smartArtillery) {
+    // Wind correction: Aero forces depend on Airspeed (Velocity relative to
+    // air)
+    Eigen::Vector3d relativeVelocity = state.velocity - m_windVelocity;
+
     // Get basic forces (drag and thrust)
-    F_drag = smartArtillery->getAero().computeDragForce(state.velocity,
+    // Drag uses relative velocity
+    F_drag = smartArtillery->getAero().computeDragForce(relativeVelocity,
                                                         state.position.z());
     F_thrust = smartArtillery->getPropulsion().computeThrustForce(
-        state.elapsedTime, state.velocity);
+        state.elapsedTime,
+        state.velocity); // Thrust is independent of wind (mostly)
 
     // Add fin forces if guidance is enabled
     if (smartArtillery->isGuidanceEnabled()) {
       // SmartArtillery computes fin lift using its guidance/navigation/control
-      // systems
-      F_finLift = smartArtillery->computeFinLift(state);
+      // systems. Needs to know wind/relative velocity for correct lift calc.
+      F_finLift = smartArtillery->computeFinLift(state, m_windVelocity);
     }
   } else if (dumbArtillery) {
+    // Wind correction for DumbArtillery too
+    Eigen::Vector3d relativeVelocity = state.velocity - m_windVelocity;
+
     // Original dumb artillery logic
-    F_drag = dumbArtillery->getAero().computeDragForce(state.velocity,
+    // Drag uses relative velocity
+    F_drag = dumbArtillery->getAero().computeDragForce(relativeVelocity,
                                                        state.position.z());
     F_thrust = dumbArtillery->getPropulsion().computeThrustForce(
         state.elapsedTime, state.velocity);
