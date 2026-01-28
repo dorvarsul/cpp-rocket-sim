@@ -12,7 +12,8 @@ public:
 
   void init();
   void render(const Eigen::Matrix4f &view, const Eigen::Matrix4f &proj,
-              const std::vector<std::vector<StateVector>> &trajectories);
+              const std::vector<std::vector<StateVector>> &trajectories,
+              float cameraDistance);
 
 private:
   GLuint m_shaderProgram;

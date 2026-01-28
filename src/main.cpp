@@ -39,7 +39,7 @@ int main() {
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
   GLFWwindow *window =
-      glfwCreateWindow(1280, 720, "Rocket Sim - Sprint 1", NULL, NULL);
+      glfwCreateWindow(1280, 720, "Rocket Sim - Sprint 2", NULL, NULL);
   if (window == NULL)
     return 1;
 
@@ -75,7 +75,12 @@ int main() {
   LaunchConfig config;
   config.elevation_deg = 45.0;
   config.azimuth_deg = 0.0;
-  config.muzzle_velocity_mps = 100.0;
+  config.dryMass_kg = 100.0;
+  config.fuelMass_kg = 50.0;
+  config.referenceArea_m2 = 0.02;
+  config.thrust_N = 5000.0;
+  config.burnDuration_s = 15.0;
+  config.massFlowRate_kgps = 50.0 / 15.0;
 
   float timeScale = 1.0f;
   bool simulationRunning = false;
@@ -145,9 +150,9 @@ int main() {
       ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down,
                                                        0.30f, NULL, &dockMain);
 
-      ImGui::DockBuilderDockWindow("Telemetry Analysis", dockLeft);
-      ImGui::DockBuilderDockWindow("Live Telemetry", dockRight);
-      ImGui::DockBuilderDockWindow("Launch Controls", dockBottom);
+      ImGui::DockBuilderDockWindow("Launch Controls", dockLeft);
+      ImGui::DockBuilderDockWindow("Telemetry Analysis", dockRight);
+      ImGui::DockBuilderDockWindow("Live Telemetry", dockBottom);
 
       ImGui::DockBuilderFinish(dockSpaceId);
     }
@@ -189,6 +194,38 @@ int main() {
     ImGui::Checkbox("Auto-Zoom 3D", &autoZoom);
     ImGui::Separator();
 
+    // Preset configurations dropdown
+    ImGui::Text("Preset Configurations");
+    const char *presets[] = {"Custom", "Short-Range Mortar (2.5-8km)",
+                             "Mid-Range Rocket (10-40km)"};
+    static int currentPreset = 0;
+    if (ImGui::Combo("##presets", &currentPreset, presets,
+                     IM_ARRAYSIZE(presets))) {
+      if (currentPreset == 1) {
+        // Short-Range Mortar (2.5-8km)
+        config.elevation_deg = 45.0;
+        config.azimuth_deg = 0.0;
+        config.dryMass_kg = 8.3;
+        config.fuelMass_kg = 3.2;
+        config.referenceArea_m2 = 0.01;
+        config.thrust_N = 6200.0;
+        config.burnDuration_s = 1.1;
+        config.massFlowRate_kgps = 2.9;
+      } else if (currentPreset == 2) {
+        // Mid-Range Rocket (10-40km)
+        config.elevation_deg = 45.0;
+        config.azimuth_deg = 0.0;
+        config.dryMass_kg = 45.5;
+        config.fuelMass_kg = 20.5;
+        config.referenceArea_m2 = 0.025;
+        config.thrust_N = 24000.0;
+        config.burnDuration_s = 2.0;
+        config.massFlowRate_kgps = 10.5;
+      }
+    }
+    ImGui::Separator();
+
+    ImGui::Text("Launch Direction");
     float el = (float)config.elevation_deg;
     if (ImGui::SliderFloat("Elevation (deg)", &el, 0.0f, 90.0f))
       config.elevation_deg = (double)el;
@@ -197,7 +234,33 @@ int main() {
     if (ImGui::SliderFloat("Azimuth (deg)", &az, 0.0f, 360.0f))
       config.azimuth_deg = (double)az;
 
-    ImGui::InputDouble("Muzzle Vel (m/s)", &config.muzzle_velocity_mps);
+    ImGui::Separator();
+    ImGui::Text("Mass & Aerodynamics");
+    float dryMass = (float)config.dryMass_kg;
+    if (ImGui::SliderFloat("Dry Mass (kg)", &dryMass, 0.0f, 1000.0f, "%.2f"))
+      config.dryMass_kg = (double)dryMass;
+
+    float fuelMass = (float)config.fuelMass_kg;
+    if (ImGui::SliderFloat("Fuel Mass (kg)", &fuelMass, 0.0f, 1000.0f, "%.2f"))
+      config.fuelMass_kg = (double)fuelMass;
+
+    float refArea = (float)config.referenceArea_m2;
+    if (ImGui::SliderFloat("Ref Area (m^2)", &refArea, 0.0f, 0.5f, "%.4f"))
+      config.referenceArea_m2 = (double)refArea;
+
+    ImGui::Separator();
+    ImGui::Text("Propulsion");
+    float thrust = (float)config.thrust_N;
+    if (ImGui::SliderFloat("Thrust (N)", &thrust, 0.0f, 50000.0f, "%.1f"))
+      config.thrust_N = (double)thrust;
+
+    float burnTime = (float)config.burnDuration_s;
+    if (ImGui::SliderFloat("Burn Time (s)", &burnTime, 0.0f, 60.0f, "%.2f"))
+      config.burnDuration_s = (double)burnTime;
+
+    float massFlow = (float)config.massFlowRate_kgps;
+    if (ImGui::SliderFloat("Mass Flow (kg/s)", &massFlow, 0.0f, 50.0f, "%.2f"))
+      config.massFlowRate_kgps = (double)massFlow;
 
     if (ImGui::Button("FIRE")) {
       auto projectile = std::make_unique<DumbArtillery>(config);
@@ -263,6 +326,17 @@ int main() {
           ImGui::Text("  Y: %.2f", s.velocity.y());
           ImGui::Text("  Z: %.2f", s.velocity.z());
           ImGui::Text("  Speed: %.2f", speed);
+          ImGui::Separator();
+          // Sprint 2: Additional telemetry
+          ImGui::Text("Mach Number: %.2f",
+                      dynamic_cast<DumbArtillery *>(p.get())->getMachNumber());
+          ImGui::Text("Current Mass: %.2f kg", s.totalMass);
+          ImGui::Text("Fuel Remaining: %.2f kg", s.fuelMass);
+          auto *arty = dynamic_cast<DumbArtillery *>(p.get());
+          if (arty) {
+            ImGui::Text("Drag Force: %.2f N", arty->getDragForce().norm());
+            ImGui::Text("Thrust: %.2f N", arty->getThrustForce().norm());
+          }
         }
       }
     }
@@ -323,6 +397,64 @@ int main() {
       ImPlot::EndPlot();
     }
 
+    // Sprint 2: Mach Number vs Altitude
+    if (ImPlot::BeginPlot("Mach Number vs Altitude")) {
+      ImPlot::SetupAxes("Altitude (m)", "Mach Number", ImPlotAxisFlags_AutoFit,
+                        ImPlotAxisFlags_AutoFit);
+
+      const auto &projectiles = world.getProjectiles();
+      for (size_t i = 0; i < projectiles.size(); ++i) {
+        auto *artillery = dynamic_cast<DumbArtillery *>(projectiles[i].get());
+        if (!artillery)
+          continue;
+
+        auto history = projectiles[i]->getHistory();
+        if (!history.empty()) {
+          std::vector<double> alt, mach;
+          alt.reserve(history.size());
+          mach.reserve(history.size());
+
+          for (const auto &s : history) {
+            alt.push_back(s.position.z());
+            double machNum =
+                artillery->getAero().getMachNumber(s.velocity, s.position.z());
+            mach.push_back(machNum);
+          }
+
+          char label[32];
+          snprintf(label, 32, "P%zu", i);
+          ImPlot::PlotLine(label, alt.data(), mach.data(), alt.size());
+        }
+      }
+      ImPlot::EndPlot();
+    }
+
+    // Sprint 2: Mass vs Time
+    if (ImPlot::BeginPlot("Mass vs Time")) {
+      ImPlot::SetupAxes("Time (s)", "Mass (kg)", ImPlotAxisFlags_AutoFit,
+                        ImPlotAxisFlags_AutoFit);
+
+      const auto &projectiles = world.getProjectiles();
+      for (size_t i = 0; i < projectiles.size(); ++i) {
+        auto history = projectiles[i]->getHistory();
+        if (!history.empty()) {
+          std::vector<double> t, m;
+          t.reserve(history.size());
+          m.reserve(history.size());
+
+          for (size_t j = 0; j < history.size(); ++j) {
+            t.push_back(j * PHYSICS_DT);
+            m.push_back(history[j].totalMass);
+          }
+
+          char label[32];
+          snprintf(label, 32, "P%zu", i);
+          ImPlot::PlotLine(label, t.data(), m.data(), t.size());
+        }
+      }
+      ImPlot::EndPlot();
+    }
+
     ImGui::End();
 
     // Rendering
@@ -330,7 +462,8 @@ int main() {
     int display_w, display_h;
     glfwGetFramebufferSize(window, &display_w, &display_h);
     glViewport(0, 0, display_w, display_h);
-    glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+    glClearColor(0.05f, 0.05f, 0.08f,
+                 1.0f); // Darker background for better contrast
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Update Camera
@@ -345,7 +478,7 @@ int main() {
       allTrajectories.push_back(p->getHistory());
     }
 
-    renderer.render(view, proj, allTrajectories);
+    renderer.render(view, proj, allTrajectories, camera.getDistance());
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

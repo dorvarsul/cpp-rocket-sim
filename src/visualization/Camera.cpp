@@ -86,7 +86,7 @@ Eigen::Matrix4f Camera::getViewMatrix() const {
 Eigen::Matrix4f Camera::getProjectionMatrix(float aspectRatio) const {
   float fov = 45.0f * (std::numbers::pi_v<float> / 180.0f);
   float near = 0.1f;
-  float far = 10000.0f;
+  float far = 200000.0f; // 200km - enough for long-range rockets
 
   float tanHalfFovy = tan(fov / 2.0f);
 

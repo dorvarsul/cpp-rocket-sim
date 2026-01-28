@@ -15,6 +15,7 @@ public:
   void setTarget(const Eigen::Vector3d &target) {
     m_target = target.cast<float>();
   }
+  float getDistance() const { return m_distance; }
 
 private:
   float m_yaw = -45.0f;

@@ -2,27 +2,40 @@
 #include <cmath>
 #include <numbers>
 
-DumbArtillery::DumbArtillery(const LaunchConfig &config) {
-  // Convert degrees to radians
+DumbArtillery::DumbArtillery(const LaunchConfig &config)
+    : m_atmosphere(), m_aero(config.referenceArea_m2, m_atmosphere),
+      m_propulsion(ThrustProfile{
+          config.thrust_N, config.burnDuration_s, config.massFlowRate_kgps,
+          Eigen::Vector3d::Zero()}), // Temp, will set below
+      m_mass(config.dryMass_kg, config.fuelMass_kg) {
+
+  // Calculate launch direction from elevation and azimuth
   double el_rad = config.elevation_deg * std::numbers::pi / 180.0;
-  double az_rad = config.azimuth_deg * std::numbers::pi /
-                  180.0; // 0 = East, 90 = North (CCW)
+  double az_rad = config.azimuth_deg * std::numbers::pi / 180.0;
+
+  // ENU coordinates: X=East, Y=North, Z=Up
+  double horiz = std::cos(el_rad);
+  Eigen::Vector3d launchDir(horiz * std::cos(az_rad), // X (East)
+                            horiz * std::sin(az_rad), // Y (North)
+                            std::sin(el_rad)          // Z (Up)
+  );
+
+  // Update propulsion with correct launch direction
+  m_propulsion =
+      PropulsionSystem(ThrustProfile{config.thrust_N, config.burnDuration_s,
+                                     config.massFlowRate_kgps, launchDir});
 
   // Initial position is origin
   m_state.position = Eigen::Vector3d::Zero();
 
-  // Calculate initial velocity components using ENU coordinates
-  // Z is Up (sin elevation)
-  // Horizontal component is cos elevation
-  // X is East (cos azimuth)
-  // Y is North (sin azimuth)
-  double v_z = config.muzzle_velocity_mps * std::sin(el_rad);
-  double v_horiz = config.muzzle_velocity_mps * std::cos(el_rad);
+  // Rockets start from rest - velocity is generated purely by thrust
+  // This is realistic rocket physics
+  m_state.velocity = Eigen::Vector3d::Zero();
 
-  double v_x = v_horiz * std::cos(az_rad);
-  double v_y = v_horiz * std::sin(az_rad);
-
-  m_state.velocity = Eigen::Vector3d(v_x, v_y, v_z);
+  // Sprint 2: Initialize mass and time
+  m_state.totalMass = m_mass.getTotalMass();
+  m_state.fuelMass = m_mass.getRemainingFuel();
+  m_state.elapsedTime = 0.0;
 
   // Record initial state
   m_history.push_back(m_state);
@@ -45,6 +58,9 @@ bool DumbArtillery::hasLanded() const { return m_landed; }
 void DumbArtillery::setState(const StateVector &newState) {
   m_state = newState;
 
+  // Update fuel mass in MassProperties
+  m_mass.setRemainingFuel(m_state.fuelMass);
+
   // Check ground collision
   if (m_state.position.z() <= 0.0) {
     m_state.position.z() = 0.0;
@@ -54,3 +70,19 @@ void DumbArtillery::setState(const StateVector &newState) {
 
   m_history.push_back(m_state);
 }
+
+double DumbArtillery::getMachNumber() const {
+  return m_aero.getMachNumber(m_state.velocity, m_state.position.z());
+}
+
+Eigen::Vector3d DumbArtillery::getDragForce() const {
+  return m_aero.computeDragForce(m_state.velocity, m_state.position.z());
+}
+
+Eigen::Vector3d DumbArtillery::getThrustForce() const {
+  return m_propulsion.computeThrustForce(m_state.elapsedTime, m_state.velocity);
+}
+
+double DumbArtillery::getCurrentMass() const { return m_state.totalMass; }
+
+double DumbArtillery::getRemainingFuel() const { return m_state.fuelMass; }

@@ -10,7 +10,6 @@ void test_vacuum_45() {
   LaunchConfig config;
   config.elevation_deg = 45.0;
   config.azimuth_deg = 0.0;
-  config.muzzle_velocity_mps = 100.0;
 
   world.addProjectile(std::make_unique<DumbArtillery>(config));
 
@@ -52,7 +51,6 @@ void test_vertical_90() {
   LaunchConfig config;
   config.elevation_deg = 90.0;
   config.azimuth_deg = 0.0;
-  config.muzzle_velocity_mps = 100.0;
 
   world.addProjectile(std::make_unique<DumbArtillery>(config));
 
@@ -98,12 +96,10 @@ void test_oop_extensibility() {
   LaunchConfig c1;
   c1.elevation_deg = 45.0;
   c1.azimuth_deg = 0.0;
-  c1.muzzle_velocity_mps = 100.0;
 
   LaunchConfig c2;
   c2.elevation_deg = 60.0;
   c2.azimuth_deg = 90.0; // North
-  c2.muzzle_velocity_mps = 100.0;
 
   world.addProjectile(std::make_unique<DumbArtillery>(c1));
   world.addProjectile(std::make_unique<DumbArtillery>(c2));

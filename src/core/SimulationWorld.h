@@ -21,5 +21,6 @@ private:
   std::vector<std::unique_ptr<IProjectile>> m_projectiles;
 
   // Derivative function for RK4: f(t, state) -> dydt
-  StateVector derivative(const StateVector &state) const;
+  // Sprint 2: Needs projectile reference for drag/thrust forces
+  StateVector derivative(const StateVector &state, IProjectile *proj) const;
 };

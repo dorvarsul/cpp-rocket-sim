@@ -78,6 +78,27 @@ target_compile_definitions(rocket_sim PRIVATE
 )
 
 # Test Runner
-add_executable(test_runner tests/test_runner.cpp src/core/DumbArtillery.cpp src/core/SimulationWorld.cpp)
+add_executable(test_runner 
+  tests/test_runner.cpp 
+  src/core/DumbArtillery.cpp 
+  src/core/SimulationWorld.cpp
+  src/core/AtmosphereModel.cpp
+  src/core/AeroComponent.cpp
+  src/core/PropulsionSystem.cpp
+  src/core/MassProperties.cpp
+)
 target_include_directories(test_runner PRIVATE src)
 target_link_libraries(test_runner PRIVATE Eigen3::Eigen)
+
+# Sprint 2 Test Runner
+add_executable(test_sprint2 
+  tests/test_sprint2.cpp 
+  src/core/DumbArtillery.cpp 
+  src/core/SimulationWorld.cpp
+  src/core/AtmosphereModel.cpp
+  src/core/AeroComponent.cpp
+  src/core/PropulsionSystem.cpp
+  src/core/MassProperties.cpp
+)
+target_include_directories(test_sprint2 PRIVATE src)
+target_link_libraries(test_sprint2 PRIVATE Eigen3::Eigen)

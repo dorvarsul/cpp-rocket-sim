@@ -140,9 +140,9 @@ void Renderer::init() {
   glEnableVertexAttribArray(1);
 }
 
-void Renderer::render(
-    const Eigen::Matrix4f &view, const Eigen::Matrix4f &proj,
-    const std::vector<std::vector<StateVector>> &trajectories) {
+void Renderer::render(const Eigen::Matrix4f &view, const Eigen::Matrix4f &proj,
+                      const std::vector<std::vector<StateVector>> &trajectories,
+                      float cameraDistance) {
   // Check for pre-existing errors
   GLenum err;
   while ((err = glGetError()) != GL_NO_ERROR) {
@@ -173,27 +173,150 @@ void Renderer::render(
   glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.data());
   glUniformMatrix4fv(projLoc, 1, GL_FALSE, proj.data());
 
-  // Draw Grid
-  glLineWidth(1.0f);
+  // Fixed grid: always 20x20 cells, but cells get bigger as you zoom out
+  static const int GRID_LINES = 10; // 10 lines per direction = 10x10 cells
+
+  // Cell size scales with camera distance
+  int cellSize =
+      std::max(100, (int)(cameraDistance / 5.0)); // Cells grow with distance
+  int gridSize = cellSize * GRID_LINES;           // Total grid extent
+
+  // Regenerate grid if camera distance changed significantly (cell size
+  // changed)
+  static int lastCellSize = 0;
+  if (std::abs(cellSize - lastCellSize) > cellSize * 0.3f) {
+    lastCellSize = cellSize;
+    m_gridVertices.clear();
+
+    for (int i = -GRID_LINES; i <= GRID_LINES; i++) {
+      float pos = i * cellSize;
+
+      // Lines parallel to X (East)
+      m_gridVertices.push_back((float)-gridSize);
+      m_gridVertices.push_back(pos);
+      m_gridVertices.push_back(0.0f);
+      m_gridVertices.push_back(0.4f); // Subtle gray
+      m_gridVertices.push_back(0.4f);
+      m_gridVertices.push_back(0.4f);
+
+      m_gridVertices.push_back((float)gridSize);
+      m_gridVertices.push_back(pos);
+      m_gridVertices.push_back(0.0f);
+      m_gridVertices.push_back(0.4f);
+      m_gridVertices.push_back(0.4f);
+      m_gridVertices.push_back(0.4f);
+
+      // Lines parallel to Y (North)
+      m_gridVertices.push_back(pos);
+      m_gridVertices.push_back((float)-gridSize);
+      m_gridVertices.push_back(0.0f);
+      m_gridVertices.push_back(0.4f);
+      m_gridVertices.push_back(0.4f);
+      m_gridVertices.push_back(0.4f);
+
+      m_gridVertices.push_back(pos);
+      m_gridVertices.push_back((float)gridSize);
+      m_gridVertices.push_back(0.0f);
+      m_gridVertices.push_back(0.4f);
+      m_gridVertices.push_back(0.4f);
+      m_gridVertices.push_back(0.4f);
+    }
+
+    // Add axis lines (scaled appropriately)
+    float axisLength = gridSize / 10.0f;
+    if (axisLength < 100)
+      axisLength = 100;
+
+    // X (Red)
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(1);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(axisLength);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(1);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+
+    // Y (Green)
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(1);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(axisLength);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(1);
+    m_gridVertices.push_back(0);
+
+    // Z (Blue)
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(1);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(axisLength);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(0);
+    m_gridVertices.push_back(1);
+
+    // Update GPU buffer
+    glBindBuffer(GL_ARRAY_BUFFER, m_gridVbo);
+    glBufferData(GL_ARRAY_BUFFER, m_gridVertices.size() * sizeof(float),
+                 m_gridVertices.data(), GL_DYNAMIC_DRAW);
+  }
+
+  // Draw Grid - subtle reference lines
+  float lineWidth = 1.0f; // Subtle, constant width
+  glLineWidth(lineWidth);
   glBindVertexArray(m_gridVao);
   glDrawArrays(GL_LINES, 0, m_gridVertices.size() / 6);
 
-  // Draw Trajectories
+  // Draw Trajectories with colors matching ImPlot
+  // ImPlot default color palette (matching the 2D graphs)
+  static const float colors[][3] = {
+      {0.0f, 0.7490196228f, 1.0f}, // Cyan
+      {1.0f, 0.0f, 0.0f},          // Red
+      {0.4980392158f, 1.0f, 0.0f}, // Green
+      {1.0f, 1.0f, 0.0f},          // Yellow
+      {0.0f, 0.4980392158f, 1.0f}, // Blue
+      {1.0f, 0.0f, 1.0f},          // Magenta
+      {0.0f, 1.0f, 1.0f},          // Cyan
+      {1.0f, 0.5019607842f, 0.0f}, // Orange
+  };
+  static const int numColors = 8;
+
   std::vector<float> trajVertices;
+  int trajIndex = 0;
   for (const auto &history : trajectories) {
-    if (history.empty())
+    if (history.empty()) {
+      trajIndex++;
       continue;
+    }
+
+    // Get color for this trajectory
+    const float *color = colors[trajIndex % numColors];
 
     for (const auto &state : history) {
       trajVertices.push_back((float)state.position.x());
       trajVertices.push_back((float)state.position.y());
       trajVertices.push_back((float)state.position.z());
 
-      // White color
-      trajVertices.push_back(1.0f);
-      trajVertices.push_back(1.0f);
-      trajVertices.push_back(1.0f);
+      // Use trajectory-specific color
+      trajVertices.push_back(color[0]);
+      trajVertices.push_back(color[1]);
+      trajVertices.push_back(color[2]);
     }
+    trajIndex++;
   }
 
   if (!trajVertices.empty()) {
@@ -209,10 +332,10 @@ void Renderer::render(
                           (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    // We need to draw separate line strips for each trajectory
+    // Draw trajectories with thin lines
     int offset = 0;
-    glLineWidth(3.0f); // Make lines thicker
-    glPointSize(5.0f); // Make points visible
+    glLineWidth(1.8f); // Thin lines
+    glPointSize(4.0f); // Small points
 
     for (const auto &history : trajectories) {
       if (history.empty())
