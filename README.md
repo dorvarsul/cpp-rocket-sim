@@ -27,6 +27,18 @@ A C++ 3D ballistic simulation engine with atmospheric drag, variable mass dynami
 - **Data Analysis**: Altitude vs Range and Velocity vs Time graphs (ImPlot).
 - **Auto-Zoom**: 3D view automatically adjusts to keep all active projectiles in frame.
 
+## Technical Architecture
+
+The project is built on a modular C++ architecture designed for extensibility and accuracy:
+
+- **Physics Engine**: Uses a custom **4th-Order Runge-Kutta (RK4)** integrator for solving differential equations of motion 60+ times per second.
+- **GNC Subsystem**: Implements a realistic Guidance, Navigation, and Control loop.
+  - **Navigation**: Estimates state from noisy sensor data (simulated).
+  - **Guidance**: Computes acceleration commands using **Proportional Navigation (ProNav)**.
+  - **Control**: Converts guidance commands into control surface (fin) deflections based on aerodynamic authority.
+- **Aerodynamics**: Calculates forces using dynamic pressure, Mach-dependent drag coefficients, and angle-of-attack lift models.
+- **Visualization**: Renders the 3D world using **OpenGL 3.3+** with **GLFW** for windowing and **ImGui/ImPlot** for the interactive dashboard and real-time telemetry plotting.
+
 ## Prerequisites
 
 - **CMake** (3.12+)
