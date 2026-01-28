@@ -40,6 +40,12 @@ public:
    */
   double getDragCoefficient(double machNumber) const;
 
+  /**
+   * Get reference area (for fin lift calculations)
+   * @return Reference area in m²
+   */
+  double getReferenceArea() const { return m_referenceArea; }
+
 private:
   double m_referenceArea; // Cross-sectional area (m²)
   const AtmosphereModel &m_atmosphere;

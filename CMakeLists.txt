@@ -81,11 +81,16 @@ target_compile_definitions(rocket_sim PRIVATE
 add_executable(test_runner 
   tests/test_runner.cpp 
   src/core/DumbArtillery.cpp 
+  src/core/SmartArtillery.cpp
   src/core/SimulationWorld.cpp
   src/core/AtmosphereModel.cpp
   src/core/AeroComponent.cpp
   src/core/PropulsionSystem.cpp
   src/core/MassProperties.cpp
+  src/core/GuidanceUnit.cpp
+  src/core/NavigationSystem.cpp
+  src/core/ControlSystem.cpp
+  src/core/LaunchAngleSolver.cpp
 )
 target_include_directories(test_runner PRIVATE src)
 target_link_libraries(test_runner PRIVATE Eigen3::Eigen)
@@ -94,11 +99,33 @@ target_link_libraries(test_runner PRIVATE Eigen3::Eigen)
 add_executable(test_sprint2 
   tests/test_sprint2.cpp 
   src/core/DumbArtillery.cpp 
+  src/core/SmartArtillery.cpp
   src/core/SimulationWorld.cpp
   src/core/AtmosphereModel.cpp
   src/core/AeroComponent.cpp
   src/core/PropulsionSystem.cpp
   src/core/MassProperties.cpp
+  src/core/GuidanceUnit.cpp
+  src/core/NavigationSystem.cpp
+  src/core/ControlSystem.cpp
+  src/core/LaunchAngleSolver.cpp
 )
 target_include_directories(test_sprint2 PRIVATE src)
 target_link_libraries(test_sprint2 PRIVATE Eigen3::Eigen)
+
+add_executable(verify_smart 
+  tests/verify_smart_targeting.cpp 
+  src/core/DumbArtillery.cpp 
+  src/core/SmartArtillery.cpp
+  src/core/SimulationWorld.cpp
+  src/core/AtmosphereModel.cpp
+  src/core/AeroComponent.cpp
+  src/core/PropulsionSystem.cpp
+  src/core/MassProperties.cpp
+  src/core/GuidanceUnit.cpp
+  src/core/NavigationSystem.cpp
+  src/core/ControlSystem.cpp
+  src/core/LaunchAngleSolver.cpp
+)
+target_include_directories(verify_smart PRIVATE src)
+target_link_libraries(verify_smart PRIVATE Eigen3::Eigen)

@@ -7,7 +7,9 @@
 #include <GLFW/glfw3.h>
 
 #include "core/DumbArtillery.h"
+#include "core/LaunchAngleSolver.h"
 #include "core/SimulationWorld.h"
+#include "core/SmartArtillery.h"
 #include "visualization/Camera.h"
 #include "visualization/Renderer.h"
 
@@ -85,6 +87,26 @@ int main() {
   float timeScale = 1.0f;
   bool simulationRunning = false;
   double accumulatedTime = 0.0;
+
+  // Launch mode
+  enum class LaunchMode { DUMB, SMART };
+  LaunchMode launchMode = LaunchMode::DUMB;
+
+  // SmartArtillery configuration
+  float targetX = 5000.0f;
+  float targetY = 0.0f;
+  float targetZ = 0.0f;
+  GuidanceConfig guidanceConfig;
+  guidanceConfig.proNavGain = 2.0; // Reduced from 3.0 for more stable guidance
+  guidanceConfig.convergenceRadius_m = 10.0;
+  ControlLimits controlLimits;
+  controlLimits.maxFinDeflection_deg = 20.0;
+  controlLimits.maxGLoad = 10.0;
+  bool sensorNoiseEnabled = false;
+  double calculatedElevation = 45.0;
+  double calculatedRange = 0.0;
+  bool isTargetReachable =
+      true; // Tracks if smart artillery target is reachable
 
   // Main loop
   while (!glfwWindowShouldClose(window)) {
@@ -225,14 +247,114 @@ int main() {
     }
     ImGui::Separator();
 
-    ImGui::Text("Launch Direction");
-    float el = (float)config.elevation_deg;
-    if (ImGui::SliderFloat("Elevation (deg)", &el, 0.0f, 90.0f))
-      config.elevation_deg = (double)el;
+    // Launch Mode Selection
+    ImGui::Text("Launch Mode");
+    if (ImGui::RadioButton("Dumb Artillery", launchMode == LaunchMode::DUMB)) {
+      launchMode = LaunchMode::DUMB;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Smart Artillery (Guided)",
+                           launchMode == LaunchMode::SMART)) {
+      launchMode = LaunchMode::SMART;
+    }
 
-    float az = (float)config.azimuth_deg;
-    if (ImGui::SliderFloat("Azimuth (deg)", &az, 0.0f, 360.0f))
-      config.azimuth_deg = (double)az;
+    ImGui::Separator();
+
+    if (launchMode == LaunchMode::DUMB) {
+      // Manual angle control for dumb artillery
+      ImGui::Text("Launch Direction");
+      float el = (float)config.elevation_deg;
+      if (ImGui::SliderFloat("Elevation (deg)", &el, 0.0f, 90.0f))
+        config.elevation_deg = (double)el;
+
+      float az = (float)config.azimuth_deg;
+      if (ImGui::SliderFloat("Azimuth (deg)", &az, 0.0f, 360.0f))
+        config.azimuth_deg = (double)az;
+    } else {
+      // Target coordinates for smart artillery
+      ImGui::Text("Target Coordinates (ground position, meters)");
+
+      // Track previous values to detect changes
+      static float prevTargetX = targetX;
+      static float prevTargetY = targetY;
+      static LaunchConfig prevConfig = config;
+      static double calculatedAzimuth = 0.0;
+
+      ImGui::InputFloat("Target X (East)", &targetX, 100.0f, 1000.0f, "%.1f");
+      ImGui::InputFloat("Target Y (North)", &targetY, 100.0f, 1000.0f, "%.1f");
+
+      // Artillery always targets ground level
+      targetZ = 0.0f;
+      ImGui::TextDisabled("Target Z: 0.0 (ground level)");
+
+      // Only recalculate if target or config changed (NOT every frame!)
+      bool configChanged =
+          (prevConfig.dryMass_kg != config.dryMass_kg ||
+           prevConfig.fuelMass_kg != config.fuelMass_kg ||
+           prevConfig.thrust_N != config.thrust_N ||
+           prevConfig.burnDuration_s != config.burnDuration_s ||
+           prevConfig.massFlowRate_kgps != config.massFlowRate_kgps ||
+           prevConfig.referenceArea_m2 != config.referenceArea_m2);
+
+      bool targetChanged = (prevTargetX != targetX || prevTargetY != targetY);
+
+      if (targetChanged || configChanged) {
+        // Calculate launch angles when target or config changes
+        Eigen::Vector3d targetPos(targetX, targetY,
+                                  0.0); // Z=0 for ground targets
+        LaunchAngleSolver solver;
+
+        // Check if target is reachable
+        isTargetReachable = solver.isTargetReachable(config, targetPos);
+
+        if (isTargetReachable) {
+          // Get the angles (already calculated in isTargetReachable)
+          calculatedElevation = config.elevation_deg;
+          calculatedAzimuth = config.azimuth_deg;
+          calculatedRange = solver.getCalculatedRange();
+        }
+
+        // Update previous values
+        prevTargetX = targetX;
+        prevTargetY = targetY;
+        prevConfig = config;
+      }
+
+      // Display calculated values or error message
+      ImGui::Separator();
+      if (isTargetReachable) {
+        ImGui::Text("Calculated Launch Parameters:");
+
+        // For SmartArtillery, show reduced elevation (75% of ballistic optimal)
+        double displayElevation = calculatedElevation * 0.75;
+        ImGui::Text("  Elevation: %.2f° (reduced for guidance)",
+                    displayElevation);
+        ImGui::Text("  Azimuth: %.2f°", calculatedAzimuth);
+
+        // Show actual horizontal range to target
+        double actualRange = std::sqrt(targetX * targetX + targetY * targetY);
+        ImGui::Text("  Target Range: %.1f m", actualRange);
+      } else {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+                           "TARGET UNREACHABLE!");
+        ImGui::TextWrapped("The target is beyond the rocket's maximum range "
+                           "with current configuration.");
+        ImGui::TextWrapped("Try: Increase thrust, burn time, or reduce mass.");
+      }
+
+      ImGui::Separator();
+      ImGui::Text("Guidance Parameters");
+      float proNavGain = (float)guidanceConfig.proNavGain;
+      if (ImGui::SliderFloat("ProNav Gain", &proNavGain, 1.0f, 6.0f, "%.1f"))
+        guidanceConfig.proNavGain = (double)proNavGain;
+
+      float convergenceRadius = (float)guidanceConfig.convergenceRadius_m;
+      if (ImGui::SliderFloat("Convergence Radius (m)", &convergenceRadius, 1.0f,
+                             50.0f, "%.1f"))
+        guidanceConfig.convergenceRadius_m = (double)convergenceRadius;
+
+      ImGui::Checkbox("Enable Sensor Noise", &sensorNoiseEnabled);
+    }
 
     ImGui::Separator();
     ImGui::Text("Mass & Aerodynamics");
@@ -263,9 +385,48 @@ int main() {
       config.massFlowRate_kgps = (double)massFlow;
 
     if (ImGui::Button("FIRE")) {
-      auto projectile = std::make_unique<DumbArtillery>(config);
-      world.addProjectile(std::move(projectile));
-      simulationRunning = true;
+      if (launchMode == LaunchMode::SMART) {
+        // Check if target is reachable before launching
+        if (!isTargetReachable) {
+          // Show error - don't launch
+          ImGui::OpenPopup("Unreachable Target");
+        } else {
+          // Recalculate angles right before launch with current config
+          Eigen::Vector3d targetPos(targetX, targetY, targetZ);
+          LaunchAngleSolver solver;
+          auto [elevation, azimuth] =
+              solver.calculateLaunchAngles(config, targetPos);
+
+          config.elevation_deg = elevation;
+          config.azimuth_deg = azimuth;
+
+          // Set guidance target
+          guidanceConfig.targetPosition = targetPos;
+
+          // Create SmartArtillery with calculated angles and target
+          auto projectile = std::make_unique<SmartArtillery>(
+              config, guidanceConfig, controlLimits, sensorNoiseEnabled);
+          world.addProjectile(std::move(projectile));
+          simulationRunning = true;
+        }
+      } else {
+        // Create DumbArtillery
+        auto projectile = std::make_unique<DumbArtillery>(config);
+        world.addProjectile(std::move(projectile));
+        simulationRunning = true;
+      }
+    }
+
+    // Popup for unreachable target
+    if (ImGui::BeginPopup("Unreachable Target")) {
+      ImGui::Text("Cannot launch: Target is UNREACHABLE!");
+      ImGui::Separator();
+      ImGui::TextWrapped("The target is beyond the rocket's range with current "
+                         "configuration.");
+      if (ImGui::Button("OK")) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
     }
 
     ImGui::SameLine();
@@ -337,6 +498,35 @@ int main() {
             ImGui::Text("Drag Force: %.2f N", arty->getDragForce().norm());
             ImGui::Text("Thrust: %.2f N", arty->getThrustForce().norm());
           }
+
+          // SmartArtillery-specific telemetry
+          auto *smartArty = dynamic_cast<SmartArtillery *>(p.get());
+          if (smartArty) {
+            ImGui::Separator();
+            ImGui::Text("Smart Artillery Guidance");
+            ImGui::Text("  Distance to Target: %.2f m",
+                        smartArty->getDistanceToTarget());
+            ImGui::Text("  G-Load: %.2f G", smartArty->getCurrentGLoad());
+            auto finAngles = smartArty->getFinAngles();
+            ImGui::Text("  Fin Pitch: %.2f°", finAngles.x() * 180.0 / M_PI);
+            ImGui::Text("  Fin Yaw: %.2f°", finAngles.y() * 180.0 / M_PI);
+
+            // Show guidance phase
+            const char *guidanceStatus;
+            if (!smartArty->isGuidanceEnabled()) {
+              guidanceStatus = "DISABLED";
+            } else if (smartArty->isGuidanceActive()) {
+              guidanceStatus = "GUIDING";
+            } else {
+              guidanceStatus = "BOOST (waiting for velocity)";
+            }
+            ImGui::Text("  Guidance: %s", guidanceStatus);
+
+            if (smartArty->hasReachedTarget()) {
+              ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
+                                 "  STATUS: TARGET REACHED!");
+            }
+          }
         }
       }
     }
@@ -345,29 +535,102 @@ int main() {
     // 2D Analysis
     ImGui::Begin("Telemetry Analysis");
 
-    if (ImPlot::BeginPlot("Altitude vs Range")) {
-      ImPlot::SetupAxes("Ground Range (m)", "Altitude (m)",
-                        ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+    // Throttle plot updates for better performance (update every 3 frames ~=
+    // 20Hz)
+    static int plotUpdateCounter = 0;
+    static std::vector<std::vector<double>> cached_altitude_x,
+        cached_altitude_y;
+    static std::vector<std::vector<double>> cached_velocity_t,
+        cached_velocity_v;
+    static std::vector<std::vector<double>> cached_mach_alt, cached_mach_mach;
+    static std::vector<std::vector<double>> cached_mass_t, cached_mass_m;
 
+    plotUpdateCounter++;
+    bool updatePlotData =
+        (plotUpdateCounter % 3 == 0); // Update every 3rd frame
+
+    if (updatePlotData) {
       const auto &projectiles = world.getProjectiles();
+
+      // Clear cached data
+      cached_altitude_x.clear();
+      cached_altitude_y.clear();
+      cached_velocity_t.clear();
+      cached_velocity_v.clear();
+      cached_mach_alt.clear();
+      cached_mach_mach.clear();
+      cached_mass_t.clear();
+      cached_mass_m.clear();
+
+      // Rebuild cache for all projectiles
       for (size_t i = 0; i < projectiles.size(); ++i) {
         auto history = projectiles[i]->getHistory();
         if (!history.empty()) {
-          std::vector<double> x, y; // ImPlot needs double or float arrays
+          // Cache altitude vs range data
+          std::vector<double> x, y;
           x.reserve(history.size());
           y.reserve(history.size());
-
           for (const auto &s : history) {
             double range = std::sqrt(s.position.x() * s.position.x() +
                                      s.position.y() * s.position.y());
             x.push_back(range);
             y.push_back(s.position.z());
           }
+          cached_altitude_x.push_back(x);
+          cached_altitude_y.push_back(y);
 
-          char label[32];
-          snprintf(label, 32, "P%zu", i);
-          ImPlot::PlotLine(label, x.data(), y.data(), x.size());
+          // Cache velocity vs time data
+          std::vector<double> t, v;
+          t.reserve(history.size());
+          v.reserve(history.size());
+          for (size_t j = 0; j < history.size(); ++j) {
+            t.push_back(j * PHYSICS_DT);
+            v.push_back(history[j].velocity.norm());
+          }
+          cached_velocity_t.push_back(t);
+          cached_velocity_v.push_back(v);
+
+          // Cache mach number data
+          auto *artillery = dynamic_cast<DumbArtillery *>(projectiles[i].get());
+          if (artillery) {
+            std::vector<double> alt, mach;
+            alt.reserve(history.size());
+            mach.reserve(history.size());
+            for (const auto &s : history) {
+              alt.push_back(s.position.z());
+              double machNum = artillery->getAero().getMachNumber(
+                  s.velocity, s.position.z());
+              mach.push_back(machNum);
+            }
+            cached_mach_alt.push_back(alt);
+            cached_mach_mach.push_back(mach);
+          }
+
+          // Cache mass vs time data
+          std::vector<double> t_mass, m;
+          t_mass.reserve(history.size());
+          m.reserve(history.size());
+          for (size_t j = 0; j < history.size(); ++j) {
+            t_mass.push_back(j * PHYSICS_DT);
+            m.push_back(history[j].totalMass);
+          }
+          cached_mass_t.push_back(t_mass);
+          cached_mass_m.push_back(m);
         }
+      }
+    }
+
+    if (ImPlot::BeginPlot("Altitude vs Range")) {
+      ImPlot::SetupAxes("Ground Range (m)", "Altitude (m)",
+                        ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+
+      // Use cached data
+      for (size_t i = 0; i < cached_altitude_x.size(); ++i) {
+        char label[32];
+        snprintf(label, 32, "P%zu", i);
+        ImPlot::PlotLine(label, cached_altitude_x[i].data(),
+                         cached_altitude_y[i].data(),
+                         cached_altitude_x[i].size());
       }
       ImPlot::EndPlot();
     }
@@ -376,23 +639,12 @@ int main() {
       ImPlot::SetupAxes("Time (s)", "Velocity (m/s)", ImPlotAxisFlags_AutoFit,
                         ImPlotAxisFlags_AutoFit);
 
-      const auto &projectiles = world.getProjectiles();
-      for (size_t i = 0; i < projectiles.size(); ++i) {
-        auto history = projectiles[i]->getHistory();
-        if (!history.empty()) {
-          std::vector<double> t, v;
-          t.reserve(history.size());
-          v.reserve(history.size());
-
-          for (size_t j = 0; j < history.size(); ++j) {
-            t.push_back(j * PHYSICS_DT); // Approximation
-            v.push_back(history[j].velocity.norm());
-          }
-
-          char label[32];
-          snprintf(label, 32, "P%zu", i);
-          ImPlot::PlotLine(label, t.data(), v.data(), t.size());
-        }
+      for (size_t i = 0; i < cached_velocity_t.size(); ++i) {
+        char label[32];
+        snprintf(label, 32, "P%zu", i);
+        ImPlot::PlotLine(label, cached_velocity_t[i].data(),
+                         cached_velocity_v[i].data(),
+                         cached_velocity_t[i].size());
       }
       ImPlot::EndPlot();
     }
@@ -402,29 +654,11 @@ int main() {
       ImPlot::SetupAxes("Altitude (m)", "Mach Number", ImPlotAxisFlags_AutoFit,
                         ImPlotAxisFlags_AutoFit);
 
-      const auto &projectiles = world.getProjectiles();
-      for (size_t i = 0; i < projectiles.size(); ++i) {
-        auto *artillery = dynamic_cast<DumbArtillery *>(projectiles[i].get());
-        if (!artillery)
-          continue;
-
-        auto history = projectiles[i]->getHistory();
-        if (!history.empty()) {
-          std::vector<double> alt, mach;
-          alt.reserve(history.size());
-          mach.reserve(history.size());
-
-          for (const auto &s : history) {
-            alt.push_back(s.position.z());
-            double machNum =
-                artillery->getAero().getMachNumber(s.velocity, s.position.z());
-            mach.push_back(machNum);
-          }
-
-          char label[32];
-          snprintf(label, 32, "P%zu", i);
-          ImPlot::PlotLine(label, alt.data(), mach.data(), alt.size());
-        }
+      for (size_t i = 0; i < cached_mach_alt.size(); ++i) {
+        char label[32];
+        snprintf(label, 32, "P%zu", i);
+        ImPlot::PlotLine(label, cached_mach_alt[i].data(),
+                         cached_mach_mach[i].data(), cached_mach_alt[i].size());
       }
       ImPlot::EndPlot();
     }
@@ -434,23 +668,11 @@ int main() {
       ImPlot::SetupAxes("Time (s)", "Mass (kg)", ImPlotAxisFlags_AutoFit,
                         ImPlotAxisFlags_AutoFit);
 
-      const auto &projectiles = world.getProjectiles();
-      for (size_t i = 0; i < projectiles.size(); ++i) {
-        auto history = projectiles[i]->getHistory();
-        if (!history.empty()) {
-          std::vector<double> t, m;
-          t.reserve(history.size());
-          m.reserve(history.size());
-
-          for (size_t j = 0; j < history.size(); ++j) {
-            t.push_back(j * PHYSICS_DT);
-            m.push_back(history[j].totalMass);
-          }
-
-          char label[32];
-          snprintf(label, 32, "P%zu", i);
-          ImPlot::PlotLine(label, t.data(), m.data(), t.size());
-        }
+      for (size_t i = 0; i < cached_mass_t.size(); ++i) {
+        char label[32];
+        snprintf(label, 32, "P%zu", i);
+        ImPlot::PlotLine(label, cached_mass_t[i].data(),
+                         cached_mass_m[i].data(), cached_mass_t[i].size());
       }
       ImPlot::EndPlot();
     }

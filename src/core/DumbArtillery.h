@@ -32,7 +32,7 @@ public:
   const MassProperties &getMass() const { return m_mass; }
   const AtmosphereModel &getAtmosphere() const { return m_atmosphere; }
 
-private:
+protected:
   StateVector m_state;
   std::vector<StateVector> m_history;
   bool m_landed = false;

@@ -1,4 +1,5 @@
 #include "SimulationWorld.h"
+#include "SmartArtillery.h"
 #include <iostream>
 
 SimulationWorld::SimulationWorld() {}
@@ -25,39 +26,61 @@ StateVector SimulationWorld::derivative(const StateVector &state,
   Eigen::Vector3d F_gravity(0.0, 0.0, -state.totalMass * GRAVITY);
   Eigen::Vector3d F_drag = Eigen::Vector3d::Zero();
   Eigen::Vector3d F_thrust = Eigen::Vector3d::Zero();
+  Eigen::Vector3d F_finLift = Eigen::Vector3d::Zero();
 
-  // Get forces from projectile components
-  auto *artillery = dynamic_cast<DumbArtillery *>(proj);
-  if (artillery) {
-    F_drag = artillery->getAero().computeDragForce(state.velocity,
-                                                   state.position.z());
-    F_thrust = artillery->getPropulsion().computeThrustForce(state.elapsedTime,
-                                                             state.velocity);
+  // Try casting to SmartArtillery first (it extends DumbArtillery)
+  auto *smartArtillery = dynamic_cast<SmartArtillery *>(proj);
+  auto *dumbArtillery = dynamic_cast<DumbArtillery *>(proj);
+
+  if (smartArtillery) {
+    // Get basic forces (drag and thrust)
+    F_drag = smartArtillery->getAero().computeDragForce(state.velocity,
+                                                        state.position.z());
+    F_thrust = smartArtillery->getPropulsion().computeThrustForce(
+        state.elapsedTime, state.velocity);
+
+    // Add fin forces if guidance is enabled
+    if (smartArtillery->isGuidanceEnabled()) {
+      // SmartArtillery computes fin lift using its guidance/navigation/control
+      // systems
+      F_finLift = smartArtillery->computeFinLift(state);
+    }
+  } else if (dumbArtillery) {
+    // Original dumb artillery logic
+    F_drag = dumbArtillery->getAero().computeDragForce(state.velocity,
+                                                       state.position.z());
+    F_thrust = dumbArtillery->getPropulsion().computeThrustForce(
+        state.elapsedTime, state.velocity);
   }
 
   // Total force
-  Eigen::Vector3d F_total = F_gravity + F_drag + F_thrust;
+  Eigen::Vector3d F_total = F_gravity + F_drag + F_thrust + F_finLift;
 
   // d(vel)/dt = acceleration = F_total / m_current
   if (state.totalMass > 1e-6) {
     output.velocity = F_total / state.totalMass;
+
+    // Update G-load for SmartArtillery telemetry
+    if (smartArtillery) {
+      smartArtillery->setCurrentGLoad(output.velocity);
+    }
   } else {
     output.velocity = Eigen::Vector3d::Zero();
   }
 
   // d(mass)/dt and d(fuel)/dt from fuel consumption
   double fuelBurnRate = 0.0;
-  if (artillery) {
-    fuelBurnRate = artillery->getPropulsion().isBurning(state.elapsedTime)
-                       ? artillery->getPropulsion().getFuelConsumed(1.0)
+  if (dumbArtillery) {
+    fuelBurnRate = dumbArtillery->getPropulsion().isBurning(state.elapsedTime)
+                       ? dumbArtillery->getPropulsion().getFuelConsumed(1.0)
                        : 0.0; // mass flow rate
     // Actually get the mass flow rate from config
-    if (artillery->getPropulsion().isBurning(state.elapsedTime)) {
+    if (dumbArtillery->getPropulsion().isBurning(state.elapsedTime)) {
       // We need mass flow rate - let's compute it from consumed fuel
       double dt_small = 0.001;
       double fuel1 =
-          artillery->getPropulsion().getFuelConsumed(state.elapsedTime);
-      double fuel2 = artillery->getPropulsion().getFuelConsumed(
+          dumbArtillery->getPropulsion().getFuelConsumed(state.elapsedTime);
+      double fuel2 = dumbArtillery->getPropulsion().getFuelConsumed(
           state.elapsedTime + dt_small);
       fuelBurnRate = (fuel2 - fuel1) / dt_small;
     }
