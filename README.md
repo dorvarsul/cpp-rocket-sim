@@ -2,6 +2,8 @@
 
 A C++ 3D ballistic simulation engine with atmospheric drag, variable mass dynamics, and real-time telemetry.
 
+
+
 ## Features
 
 ### Guidance & Environment

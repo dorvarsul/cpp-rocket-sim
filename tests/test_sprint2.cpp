@@ -29,9 +29,9 @@ void test_terminal_velocity() {
 
   // Set initial altitude to 10,000m with small downward velocity
   StateVector initialState = projectile->getState();
-  initialState.position.z() = 10000.0;
+  initialState.position.z() = 10001.0;
   initialState.velocity =
-      Eigen::Vector3d(0.0, 0.0, -0.1); // Small downward velocity
+      Eigen::Vector3d(0.0, 0.0, -10.0); // Downward velocity start
   projectile->setState(initialState);
 
   world.addProjectile(std::move(projectile));
@@ -224,7 +224,7 @@ void test_mass_to_range() {
   configB.thrust_N = 2000.0;
   configB.burnDuration_s = 50.0;
   configB.massFlowRate_kgps = 100.0 / 50.0;
-  configB.thrust_N = 2000.0;
+  configB.thrust_N = 3000.0; // Increased to ensure liftoff (T > W)
   configB.burnDuration_s = 50.0;
   configB.massFlowRate_kgps = 100.0 / 50.0;
 

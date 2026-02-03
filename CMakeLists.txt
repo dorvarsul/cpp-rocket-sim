@@ -129,3 +129,39 @@ add_executable(verify_smart
 )
 target_include_directories(verify_smart PRIVATE src)
 target_link_libraries(verify_smart PRIVATE Eigen3::Eigen)
+
+# Smart Guidance Verification
+add_executable(test_smart_guidance 
+    tests/test_smart_guidance.cpp
+    src/core/LaunchAngleSolver.cpp
+    src/core/AtmosphereModel.cpp
+    src/core/AeroComponent.cpp
+    src/core/PropulsionSystem.cpp
+    src/core/MassProperties.cpp
+    src/core/ControlSystem.cpp
+    src/core/GuidanceUnit.cpp
+    src/core/NavigationSystem.cpp
+    src/core/SimulationWorld.cpp
+    src/core/DumbArtillery.cpp
+    src/core/SmartArtillery.cpp
+)
+target_include_directories(test_smart_guidance PRIVATE src)
+target_link_libraries(test_smart_guidance PRIVATE Eigen3::Eigen)
+
+# Debug Solver
+add_executable(debug_solver 
+    tests/debug_solver.cpp
+    src/core/LaunchAngleSolver.cpp
+    src/core/AtmosphereModel.cpp
+    src/core/AeroComponent.cpp
+    src/core/PropulsionSystem.cpp
+    src/core/MassProperties.cpp
+    src/core/ControlSystem.cpp
+    src/core/GuidanceUnit.cpp
+    src/core/NavigationSystem.cpp
+    src/core/SimulationWorld.cpp
+    src/core/DumbArtillery.cpp
+    src/core/SmartArtillery.cpp
+)
+target_include_directories(debug_solver PRIVATE src)
+target_link_libraries(debug_solver PRIVATE Eigen3::Eigen)

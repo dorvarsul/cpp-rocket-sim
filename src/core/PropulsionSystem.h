@@ -55,10 +55,13 @@ public:
    * Compute thrust force vector
    * @param elapsedTime_s Time since launch (s)
    * @param velocity Current velocity vector
+   * @param launchDirection Optional launch direction override for low-speed
+   * stability
    * @return Thrust force vector in Newtons
    */
-  Eigen::Vector3d computeThrustForce(double elapsedTime_s,
-                                     const Eigen::Vector3d &velocity) const;
+  Eigen::Vector3d computeThrustForce(
+      double elapsedTime_s, const Eigen::Vector3d &velocity,
+      const Eigen::Vector3d &launchDirection = Eigen::Vector3d::Zero()) const;
 
 private:
   ThrustProfile m_profile;

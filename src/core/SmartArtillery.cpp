@@ -10,12 +10,6 @@ SmartArtillery::SmartArtillery(const LaunchConfig &config,
   m_navigation.setSensorNoise(sensorNoiseEnabled);
 }
 
-void SmartArtillery::update(double dt) {
-  // This gets called by SimulationWorld
-  // The actual physics integration happens there via RK4
-  // We just need to make sure our state is up to date
-}
-
 double SmartArtillery::getDistanceToTarget() const {
   return m_guidance.getDistanceToTarget(m_state.position);
 }
@@ -32,99 +26,88 @@ void SmartArtillery::setTarget(const Eigen::Vector3d &newTarget) {
   m_guidance.setTarget(newTarget);
 }
 
-Eigen::Vector3d
-SmartArtillery::computeFinLift(const StateVector &state,
-                               const Eigen::Vector3d &windVelocity) {
-  // Return zero if guidance is disabled or projectile has landed
-  if (!m_guidanceEnabled || m_landed) {
-    return Eigen::Vector3d::Zero();
-  }
-
-  // Don't apply guidance until sufficient velocity (boost phase)
-  // This prevents wild overcorrections when rocket is still accelerating
-  const double MIN_GUIDANCE_VELOCITY = 50.0; // m/s
-  double currentSpeed = state.velocity.norm();
-  if (currentSpeed < MIN_GUIDANCE_VELOCITY) {
-    return Eigen::Vector3d::Zero();
-  }
-
-  // Get estimated state from navigation system
-  StateVector estimatedState = m_navigation.getEstimatedState(state);
-
-  // Compute guidance command (desired lateral acceleration)
-  Eigen::Vector3d guidanceAccel =
-      m_guidance.computeGuidanceCommand(estimatedState);
-
-  // Sprint 3: Wind Correction
-  // Aerodynamic forces depend on Relative Velocity (Airspeed)
-  Eigen::Vector3d relativeVelocity = state.velocity - windVelocity;
-  double airspeed = relativeVelocity.norm();
-
-  // Compute dynamic pressure using Airspeed
-  double altitude = state.position.z();
-  double rho = m_atmosphere.getDensity(altitude);
-  double dynamicPressure = 0.5 * rho * airspeed * airspeed;
-
-  // Translate guidance command to fin deflections
-  // Note: Control system should technically operate on airspeed too for scaling
-  Eigen::Vector2d finAngles = m_control.computeFinDeflection(
-      guidanceAccel, relativeVelocity, dynamicPressure);
-
-  // Compute aerodynamic lift force from fins using Airspeed
-  Eigen::Vector3d finLift = m_control.computeFinLift(
-      finAngles, relativeVelocity, dynamicPressure, m_aero.getReferenceArea());
-
-  return finLift;
-}
-
 void SmartArtillery::setCurrentGLoad(const Eigen::Vector3d &totalAcceleration) {
   m_currentGLoad = m_control.getCurrentGLoad(totalAcceleration);
 }
 
-Eigen::Vector3d SmartArtillery::computeTotalForces(double elapsedTime) {
-  // Get basic forces from parent (gravity, drag, thrust)
-  Eigen::Vector3d totalForce = Eigen::Vector3d::Zero();
+void SmartArtillery::updateTelemetry(const Eigen::Vector3d &acceleration) {
+  // Update Phase
+  double time = m_state.elapsedTime;
 
-  // Gravity
-  const double g = 9.81;
-  totalForce += Eigen::Vector3d(0, 0, -g * m_state.totalMass);
-
-  // Drag
-  totalForce += getDragForce();
-
-  // Thrust
-  totalForce += getThrustForce();
-
-  // Add guidance forces if enabled
-  if (m_guidanceEnabled && !m_landed) {
-    // Get estimated state from navigation system
-    StateVector estimatedState = m_navigation.getEstimatedState(m_state);
-
-    // Compute guidance command
-    Eigen::Vector3d guidanceAccel =
-        m_guidance.computeGuidanceCommand(estimatedState);
-
-    // Compute dynamic pressure
-    double altitude = m_state.position.z();
-    double rho = m_atmosphere.getDensity(altitude);
-    double speed = m_state.velocity.norm();
-    double dynamicPressure = 0.5 * rho * speed * speed;
-
-    // Translate guidance to fin deflections
-    Eigen::Vector2d finAngles = m_control.computeFinDeflection(
-        guidanceAccel, m_state.velocity, dynamicPressure);
-
-    // Compute aerodynamic lift from fins
-    Eigen::Vector3d finLift =
-        m_control.computeFinLift(finAngles, m_state.velocity, dynamicPressure,
-                                 m_aero.getReferenceArea());
-
-    totalForce += finLift;
-
-    // Calculate G-load for telemetry
-    Eigen::Vector3d totalAccel = totalForce / m_state.totalMass;
-    m_currentGLoad = m_control.getCurrentGLoad(totalAccel);
+  switch (m_phase) {
+  case GuidancePhase::IDLE:
+    if (time > 0.0 && m_propulsion.isBurning(time)) {
+      m_phase = GuidancePhase::ASCENT;
+    }
+    break;
+  case GuidancePhase::ASCENT:
+    if (!m_propulsion.isBurning(time)) {
+      m_phase = GuidancePhase::BALLISTIC;
+    }
+    break;
+  case GuidancePhase::BALLISTIC:
+    // Detect Apogee (vertical velocity turns negative)
+    if (m_state.velocity.z() < 0.0) {
+      m_phase = GuidancePhase::TERMINAL;
+    }
+    break;
+  case GuidancePhase::TERMINAL:
+    if (m_landed) {
+      m_phase = GuidancePhase::IDLE; // Reset? Or stay terminal/ended
+    }
+    break;
   }
 
-  return totalForce;
+  // Base telemetry
+  setCurrentGLoad(acceleration);
+}
+
+void SmartArtillery::update(double dt) {
+  // Unused
+}
+
+Eigen::Vector3d
+SmartArtillery::computeForces(const StateVector &state,
+                              const Eigen::Vector3d &windVelocity) const {
+  // 1. Get base forces (Gravity + Drag + Thrust)
+  Eigen::Vector3d totalForce =
+      DumbArtillery::computeForces(state, windVelocity);
+
+  // 2. Apply Guidance ONLY in TERMINAL phase
+  if (!m_guidanceEnabled || m_phase != GuidancePhase::TERMINAL) {
+    return totalForce;
+  }
+
+  // Extra safety: Don't guide if too slow (aerodynamically ineffective)
+  if (state.velocity.norm() < 30.0) {
+    return totalForce;
+  }
+
+  // Get estimated state from navigation system
+  auto &nav = const_cast<NavigationSystem &>(m_navigation);
+  StateVector estimatedState = nav.getEstimatedState(state);
+
+  // Compute guidance command
+  auto &guid = const_cast<GuidanceUnit &>(m_guidance);
+  Eigen::Vector3d guidanceAccel = guid.computeGuidanceCommand(estimatedState);
+
+  // Wind Correction for Control
+  Eigen::Vector3d relativeVelocity = state.velocity - windVelocity;
+  double airspeed = relativeVelocity.norm();
+
+  // Dynamic Pressure
+  double altitude = state.position.z();
+  double rho = m_atmosphere.getDensity(altitude);
+  double dynamicPressure = 0.5 * rho * airspeed * airspeed;
+
+  // Fin Deflection
+  auto &ctrl = const_cast<ControlSystem &>(m_control);
+  Eigen::Vector2d finAngles = ctrl.computeFinDeflection(
+      guidanceAccel, relativeVelocity, dynamicPressure);
+
+  // Fin Lift
+  Eigen::Vector3d finLift = ctrl.computeFinLift(
+      finAngles, relativeVelocity, dynamicPressure, m_aero.getReferenceArea());
+
+  return totalForce + finLift;
 }

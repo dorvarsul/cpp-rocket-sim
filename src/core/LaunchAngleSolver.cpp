@@ -146,7 +146,8 @@ Eigen::Vector3d LaunchAngleSolver::estimateLandingPosition(
   tempWorld.addProjectile(std::move(projectile));
 
   // Run simulation until landing
-  const double dt = 0.02; // 50Hz prediction
+  // Run simulation until landing
+  const double dt = 0.1; // 10Hz prediction for speed (was 0.02)
   const double max_time = 300.0;
 
   double t = 0.0;

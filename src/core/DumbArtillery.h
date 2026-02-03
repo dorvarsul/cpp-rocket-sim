@@ -11,13 +11,21 @@ class DumbArtillery : public IProjectile {
 public:
   explicit DumbArtillery(const LaunchConfig &config);
 
+  // Compute total forces acting on the projectile
+  Eigen::Vector3d
+  computeForces(const StateVector &state,
+                const Eigen::Vector3d &windVelocity) const override;
+
   void update(double dt) override;
   StateVector getState() const override;
-  std::vector<StateVector> getHistory() const override;
+  const std::vector<StateVector> &getHistory() const override;
   bool hasLanded() const override;
 
+  // Get mass flow rate at a given time (kg/s)
+  double getMassFlowRate(double time) const override;
+
   // Helper for RK4
-  void setState(const StateVector &newState);
+  void setState(const StateVector &newState) override;
 
   // Sprint 2: Accessors for telemetry and physics
   double getMachNumber() const;
@@ -42,4 +50,5 @@ protected:
   AeroComponent m_aero;
   PropulsionSystem m_propulsion;
   MassProperties m_mass;
+  Eigen::Vector3d m_launchDirection;
 };

@@ -12,6 +12,16 @@
 class SmartArtillery : public DumbArtillery {
 public:
   /**
+   * Guidance Phase
+   */
+  enum class GuidancePhase {
+    IDLE,      // Before launch
+    ASCENT,    // Burning motor (Boost)
+    BALLISTIC, // Coasting (Midcourse)
+    TERMINAL   // Final approach (Guidance Active)
+  };
+
+  /**
    * Constructor
    * @param config Launch configuration
    * @param guidanceConfig Guidance system configuration
@@ -80,12 +90,29 @@ public:
    */
   void setCurrentGLoad(const Eigen::Vector3d &totalAcceleration);
 
+  void updateTelemetry(const Eigen::Vector3d &acceleration) override;
+
+  /**
+   * Compute total forces including guidance
+   */
+  Eigen::Vector3d
+  computeForces(const StateVector &state,
+                const Eigen::Vector3d &windVelocity) const override;
+
   /**
    * Override to add guidance forces
    */
   void update(double dt) override;
 
+  Eigen::Vector3d computeTotalForces(double elapsedTime) {
+    return Eigen::Vector3d::Zero();
+  } // Deprecated
+
+  GuidancePhase getPhase() const { return m_phase; }
+
 private:
+  GuidancePhase m_phase = GuidancePhase::IDLE;
+
   // GNC Components
   NavigationSystem m_navigation;
   GuidanceUnit m_guidance;
@@ -93,9 +120,4 @@ private:
 
   bool m_guidanceEnabled = true;
   double m_currentGLoad = 0.0;
-
-  /**
-   * Compute total forces including guidance
-   */
-  Eigen::Vector3d computeTotalForces(double elapsedTime);
 };

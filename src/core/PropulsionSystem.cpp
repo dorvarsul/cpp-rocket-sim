@@ -26,25 +26,47 @@ double PropulsionSystem::getFuelConsumed(double elapsedTime_s) const {
 
 Eigen::Vector3d
 PropulsionSystem::getThrustDirection(const Eigen::Vector3d &velocity) const {
-  double speed = velocity.norm();
-
-  // If moving, thrust along velocity direction
-  if (speed > 1e-6) {
-    return velocity / speed;
-  }
-
-  // If at rest, thrust in launch direction
-  return m_profile.launchDirection;
+  // Deprecated for direct calls, better used via computeThrustForce with
+  // override But for compatibility:
+  return computeThrustForce(0, velocity).normalized(); // Hacky
 }
 
-Eigen::Vector3d
-PropulsionSystem::computeThrustForce(double elapsedTime_s,
-                                     const Eigen::Vector3d &velocity) const {
+Eigen::Vector3d PropulsionSystem::computeThrustForce(
+    double elapsedTime_s, const Eigen::Vector3d &velocity,
+    const Eigen::Vector3d &launchRailDirection) const {
   double thrustMagnitude = getThrust(elapsedTime_s);
   if (thrustMagnitude < 1e-6) {
     return Eigen::Vector3d::Zero();
   }
 
-  Eigen::Vector3d direction = getThrustDirection(velocity);
+  double speed = velocity.norm();
+
+  // Launch Rail Logic:
+  // If speed is low (< 20 m/s) OR we explicitly provided a rail direction and
+  // time is small (< 0.5s) we force thrust to preserve launch orientation. In a
+  // 3-DOF sim, orientation = velocity direction. At Speed=0, velocity direction
+  // is undefined/zero. Gravity pulls velocity 'down' immediately. Real rockets
+  // have a rail that constrains them.
+
+  // Stability Threshold (m/s)
+  const double STABLE_SPEED = 20.0;
+
+  Eigen::Vector3d direction;
+
+  if (speed < STABLE_SPEED) {
+    // Unstable / On Rail
+    // If caller provided a specific direction (DumbArtillery/SmartArtillery
+    // should), use it.
+    if (launchRailDirection.norm() > 0.1) {
+      direction = launchRailDirection.normalized();
+    } else {
+      // Fallback to internal profile default
+      direction = m_profile.launchDirection;
+    }
+  } else {
+    // Aerodynamically Stable flight
+    direction = velocity.normalized();
+  }
+
   return thrustMagnitude * direction;
 }
