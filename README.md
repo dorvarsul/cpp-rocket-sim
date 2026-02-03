@@ -1,6 +1,8 @@
 # Rocket Sim
 
 A C++ 3D ballistic simulation engine with atmospheric drag, variable mass dynamics, and real-time telemetry.
+<img width="1854" height="1048" alt="image" src="https://github.com/user-attachments/assets/a2cdb837-7266-4170-8c2b-837be479ca26" />
+
 
 
 
