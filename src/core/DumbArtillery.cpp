@@ -1,5 +1,6 @@
 #include "DumbArtillery.h"
 #include <cmath>
+
 #include <numbers>
 
 DumbArtillery::DumbArtillery(const LaunchConfig &config)

@@ -28,7 +28,7 @@ LaunchAngleSolver::calculateLaunchAngles(const LaunchConfig &config,
 double LaunchAngleSolver::calculateAzimuth(const Eigen::Vector3d &launchPos,
                                            const Eigen::Vector3d &targetPos) {
   Eigen::Vector3d delta = targetPos - launchPos;
-  double azimuth_rad = std::atan2(delta.y(), delta.x());
+  double azimuth_rad = std::atan2(delta.x(), delta.y());
   double azimuth_deg = azimuth_rad * 180.0 / M_PI;
 
   // Normalize to [0, 360)

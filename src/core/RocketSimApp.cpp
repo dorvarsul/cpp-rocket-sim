@@ -340,7 +340,7 @@ void RocketSimApp::renderLaunchControls() {
     ImGui::Separator();
     if (m_isTargetReachable) {
       ImGui::Text("Calculated Launch Parameters:");
-      ImGui::Text("  Elevation: %.2f deg", m_calculatedElevation * 0.75);
+      ImGui::Text("  Elevation: %.2f deg", m_calculatedElevation);
       ImGui::Text("  Azimuth: %.2f deg", m_config.azimuth_deg);
       double actualRange =
           std::sqrt(m_targetX * m_targetX + m_targetY * m_targetY);
