@@ -1,56 +1,59 @@
-cmake_minimum_required(VERSION 3.20)
-project(rocket_sim VERSION 1.0.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.14)
+project(RocketSim)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Warnings
-add_compile_options(-Wall -Wextra -Wpedantic)
-
-# Dependencies
+# --- Dependencies ---
 include(FetchContent)
-
-# Eigen
-FetchContent_Declare(
-  Eigen3
-  URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
-)
-FetchContent_MakeAvailable(Eigen3)
 
 # ImGui
 FetchContent_Declare(
   imgui
-  URL https://github.com/ocornut/imgui/archive/refs/heads/docking.zip
+  GIT_REPOSITORY https://github.com/ocornut/imgui
+  GIT_TAG        docking
 )
 FetchContent_MakeAvailable(imgui)
 
 # ImPlot
 FetchContent_Declare(
   implot
-  URL https://github.com/epezent/implot/archive/refs/heads/master.zip
+  GIT_REPOSITORY https://github.com/epezent/implot
+  GIT_TAG        master
 )
 FetchContent_MakeAvailable(implot)
 
-# System Dependencies
-find_package(glfw3 3.3 REQUIRED)
+# System Libraries
+find_package(Eigen3 REQUIRED)
+find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 
-# Sources
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
+# --- Sources ---
+file(GLOB_RECURSE SOURCES
+  "src/main.cpp"
+  "src/guidance/*.cpp" "src/guidance/*.h"
+  "src/physics/*.cpp" "src/physics/*.h"
+  "src/rendering/*.cpp" "src/rendering/*.h"
+  "src/simulation/*.cpp" "src/simulation/*.h"
+  "src/utils/*.cpp" "src/utils/*.h"
+)
 
+# --- Main Executable ---
 add_executable(rocket_sim ${SOURCES})
 
-# Include paths
 target_include_directories(rocket_sim PRIVATE
-  src
+  src/guidance
+  src/physics
+  src/rendering
+  src/simulation
+  src/utils
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
   ${implot_SOURCE_DIR}
+  ${EIGEN3_INCLUDE_DIR} 
 )
 
-# Link libraries
 target_link_libraries(rocket_sim PRIVATE
   Eigen3::Eigen
   glfw
@@ -58,7 +61,7 @@ target_link_libraries(rocket_sim PRIVATE
   GLEW::GLEW
 )
 
-# ImGui Implementation Sources
+# ImGui/ImPlot Sources
 target_sources(rocket_sim PRIVATE
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -72,96 +75,57 @@ target_sources(rocket_sim PRIVATE
   ${implot_SOURCE_DIR}/implot_demo.cpp
 )
 
-# Definitions
 target_compile_definitions(rocket_sim PRIVATE
   IMGUI_IMPL_OPENGL_LOADER_GLEW
 )
 
+# --- Tests ---
+# Helper function to define tests to reduce boilerplate
+function(add_rocket_test executable_name main_file)
+    add_executable(${executable_name} 
+      ${main_file}
+      src/simulation/DumbArtillery.cpp 
+      src/simulation/SmartArtillery.cpp
+      src/simulation/SimulationWorld.cpp
+      src/physics/AtmosphereModel.cpp
+      src/physics/AeroComponent.cpp
+      src/physics/PropulsionSystem.cpp
+      src/physics/MassProperties.cpp
+      src/guidance/GuidanceUnit.cpp
+      src/guidance/NavigationSystem.cpp
+      src/guidance/ControlSystem.cpp
+      src/utils/LaunchAngleSolver.cpp
+      ${ARGN} # Extra sources
+    )
+    target_include_directories(${executable_name} PRIVATE
+      src/guidance
+      src/physics
+      src/rendering
+      src/simulation
+      src/utils
+      ${EIGEN3_INCLUDE_DIR}
+    )
+    target_link_libraries(${executable_name} PRIVATE Eigen3::Eigen)
+endfunction()
+
 # Test Runner
-add_executable(test_runner 
-  tests/test_runner.cpp 
-  src/core/DumbArtillery.cpp 
-  src/core/SmartArtillery.cpp
-  src/core/SimulationWorld.cpp
-  src/core/AtmosphereModel.cpp
-  src/core/AeroComponent.cpp
-  src/core/PropulsionSystem.cpp
-  src/core/MassProperties.cpp
-  src/core/GuidanceUnit.cpp
-  src/core/NavigationSystem.cpp
-  src/core/ControlSystem.cpp
-  src/core/LaunchAngleSolver.cpp
-)
-target_include_directories(test_runner PRIVATE src)
-target_link_libraries(test_runner PRIVATE Eigen3::Eigen)
+add_rocket_test(test_runner tests/test_runner.cpp)
 
 # Sprint 2 Test Runner
-add_executable(test_sprint2 
-  tests/test_sprint2.cpp 
-  src/core/DumbArtillery.cpp 
-  src/core/SmartArtillery.cpp
-  src/core/SimulationWorld.cpp
-  src/core/AtmosphereModel.cpp
-  src/core/AeroComponent.cpp
-  src/core/PropulsionSystem.cpp
-  src/core/MassProperties.cpp
-  src/core/GuidanceUnit.cpp
-  src/core/NavigationSystem.cpp
-  src/core/ControlSystem.cpp
-  src/core/LaunchAngleSolver.cpp
-)
-target_include_directories(test_sprint2 PRIVATE src)
-target_link_libraries(test_sprint2 PRIVATE Eigen3::Eigen)
+add_rocket_test(test_sprint2 tests/test_sprint2.cpp)
 
-add_executable(verify_smart 
-  tests/verify_smart_targeting.cpp 
-  src/core/DumbArtillery.cpp 
-  src/core/SmartArtillery.cpp
-  src/core/SimulationWorld.cpp
-  src/core/AtmosphereModel.cpp
-  src/core/AeroComponent.cpp
-  src/core/PropulsionSystem.cpp
-  src/core/MassProperties.cpp
-  src/core/GuidanceUnit.cpp
-  src/core/NavigationSystem.cpp
-  src/core/ControlSystem.cpp
-  src/core/LaunchAngleSolver.cpp
-)
-target_include_directories(verify_smart PRIVATE src)
-target_link_libraries(verify_smart PRIVATE Eigen3::Eigen)
+# Verify Smart
+add_rocket_test(verify_smart tests/verify_smart_targeting.cpp)
 
 # Smart Guidance Verification
-add_executable(test_smart_guidance 
-    tests/test_smart_guidance.cpp
-    src/core/LaunchAngleSolver.cpp
-    src/core/AtmosphereModel.cpp
-    src/core/AeroComponent.cpp
-    src/core/PropulsionSystem.cpp
-    src/core/MassProperties.cpp
-    src/core/ControlSystem.cpp
-    src/core/GuidanceUnit.cpp
-    src/core/NavigationSystem.cpp
-    src/core/SimulationWorld.cpp
-    src/core/DumbArtillery.cpp
-    src/core/SmartArtillery.cpp
-)
-target_include_directories(test_smart_guidance PRIVATE src)
-target_link_libraries(test_smart_guidance PRIVATE Eigen3::Eigen)
+# Note: This one had a slightly different list of source files in the original file, 
+# but they seem to be a subset or reordered. I'll maintain the original explicit list 
+# for correctness if the helper doesn't match perfectly, or just use the helper if it overlaps enough.
+# Looking at the original, it uses `utils/LaunchAngleSolver.cpp` and physics/guidance modules. 
+# The helper includes these. It also includes DUmby/SmartArtillery/SimulationWorld.
+# The original test_smart_guidance INCLUDED SimulationWorld, Dumb, Smart. 
+# So the helper matches!
+add_rocket_test(test_smart_guidance tests/test_smart_guidance.cpp)
 
 # Debug Solver
-add_executable(debug_solver 
-    tests/debug_solver.cpp
-    src/core/LaunchAngleSolver.cpp
-    src/core/AtmosphereModel.cpp
-    src/core/AeroComponent.cpp
-    src/core/PropulsionSystem.cpp
-    src/core/MassProperties.cpp
-    src/core/ControlSystem.cpp
-    src/core/GuidanceUnit.cpp
-    src/core/NavigationSystem.cpp
-    src/core/SimulationWorld.cpp
-    src/core/DumbArtillery.cpp
-    src/core/SmartArtillery.cpp
-)
-target_include_directories(debug_solver PRIVATE src)
-target_link_libraries(debug_solver PRIVATE Eigen3::Eigen)
+add_rocket_test(debug_solver tests/debug_solver.cpp)

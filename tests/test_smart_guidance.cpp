@@ -1,5 +1,5 @@
-#include "../src/core/SimulationWorld.h"
-#include "../src/core/SmartArtillery.h"
+#include "../src/simulation/SimulationWorld.h"
+#include "../src/simulation/SmartArtillery.h"
 #include <iomanip>
 #include <iostream>
 #include <memory>

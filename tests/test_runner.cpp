@@ -1,5 +1,5 @@
-#include "../src/core/DumbArtillery.h"
-#include "../src/core/SimulationWorld.h"
+#include "../src/simulation/DumbArtillery.h"
+#include "../src/simulation/SimulationWorld.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>

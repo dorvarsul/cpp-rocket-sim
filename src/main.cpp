@@ -1,4 +1,4 @@
-#include "core/RocketSimApp.h"
+#include "rendering/RocketSimApp.h"
 
 int main() {
   RocketSimApp app;

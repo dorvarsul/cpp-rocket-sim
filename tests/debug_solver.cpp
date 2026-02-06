@@ -1,4 +1,4 @@
-#include "../src/core/LaunchAngleSolver.h"
+#include "../src/utils/LaunchAngleSolver.h"
 #include <iostream>
 
 int main() {

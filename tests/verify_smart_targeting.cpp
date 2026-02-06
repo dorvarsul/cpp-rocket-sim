@@ -1,6 +1,6 @@
-#include "../src/core/LaunchAngleSolver.h"
-#include "../src/core/SimulationWorld.h"
-#include "../src/core/SmartArtillery.h"
+#include "../src/simulation/SimulationWorld.h"
+#include "../src/simulation/SmartArtillery.h"
+#include "../src/utils/LaunchAngleSolver.h"
 #include <cmath>
 #include <iostream>
 #include <vector>
